@@ -1,8 +1,16 @@
+// ---- كود تزييف الـ Port لمنصة Render لمنع إغلاق البوت ----
+const express = require('express');
+const app = express();
+const port = process.env.PORT || 3000;
+app.get('/', (req, res) => res.send('Bot is Online!'));
+app.listen(port, () => console.log(`🌍 Server is listening on port ${port}`));
+// ---------------------------------------------------------
+
 const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelType, PermissionsBitField, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder } = require('discord.js');
 const Keyv = require('keyv');
 require('dotenv').config();
 
-// إعداد قاعدة البيانات لحفظ الإعدادات في Railway أو Render
+// إعداد قاعدة البيانات لحفظ الإعدادات في Render
 const db = new Keyv('sqlite://tickets.sqlite');
 
 const client = new Client({ 
