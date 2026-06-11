@@ -1,7 +1,7 @@
 {
   "name": "discord-advanced-tickets-bot",
   "version": "1.0.0",
-  "description": "Advanced Ticket Bot with Mention Setup for Railway",
+  "description": "Advanced Ticket Bot with Setup Panel for Render",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
@@ -10,6 +10,7 @@
     "discord.js": "^14.14.1",
     "dotenv": "^16.4.5",
     "keyv": "^4.5.4",
-    "@keyv/sqlite": "^3.6.7"
+    "@keyv/sqlite": "^3.6.7",
+    "express": "^4.19.2"
   }
 }
