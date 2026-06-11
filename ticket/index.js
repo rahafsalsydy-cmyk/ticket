@@ -9,7 +9,7 @@ app.listen(port, () => console.log(`🌍 Server is listening on port ${port}`));
 const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelType, PermissionsBitField, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder, MessageFlags } = require('discord.js');
 require('dotenv').config();
 
-// استخدام ذاكرة داخلية سريعة بدلاً من المكونات الخارجية لضمان استقرار Render المجاني ومنع التعليق
+// استخدام ذاكرة داخلية سريعة ومستقرة لـ Render
 const memoryDB = new Map();
 
 const client = new Client({ 
@@ -155,7 +155,6 @@ client.on('interactionCreate', async (interaction) => {
 
     // و) عندما يختار "عضو" تذكرة لفتحها من القائمة المنسدلة العامة
     if (interaction.isStringSelectMenu() && interaction.customId === 'user_ticket_select') {
-        // الرد المبدئي الفوري لمنع تعليق الديسكورد نهائياً
         await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
         const savedTypes = memoryDB.get(`tickets_${interaction.guild.id}`) || [];
@@ -165,10 +164,24 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.editReply({ content: '❌ حدث خطأ، يبدو أن هذا القسم لم يعد موجوداً.' });
         }
 
+        // 🔒 [ميزة منع التكرار]: فحص ما إذا كان العضو يملك تذكرة مفتوحة بالفعل في السيرفر
+        const hasOpenTicket = interaction.guild.channels.cache.some(channel => 
+            channel.type === ChannelType.GuildText && 
+            channel.name.endsWith(`-${interaction.user.username.toLowerCase()}`)
+        );
+
+        if (hasOpenTicket) {
+            const existingChannel = interaction.guild.channels.cache.find(channel => 
+                channel.type === ChannelType.GuildText && 
+                channel.name.endsWith(`-${interaction.user.username.toLowerCase()}`)
+            );
+            return interaction.editReply({ content: `❌ لديك تذكرة مفتوحة بالفعل في السيرفر هنا: ${existingChannel}\nلا يمكنك فتح تذكرة أخرى إلا بعد إغلاق وحذف التذكرة الحالية.` });
+        }
+
         try {
             const channelName = `${selectedType.label}-${interaction.user.username}`.replace(/\s+/g, '-').toLowerCase();
 
-            // إنشاء روم الشات المغلق وتطبيق الصلاحيات بدقة وسرعة
+            // إنشاء روم الشات المغلق وتطبيق الصلاحيات بدقة
             const channel = await interaction.guild.channels.create({
                 name: channelName,
                 type: ChannelType.GuildText,
@@ -204,8 +217,8 @@ client.on('interactionCreate', async (interaction) => {
             await interaction.editReply({ content: `✅ تم فتح تذكرتك بنجاح هنا: ${channel}` });
 
         } catch (error) {
-            console.error(error);
-            await interaction.editReply({ content: '❌ حدث خطأ أثناء إنشاء الغرفة. تأكد من أن رتبة البوت أعلى من رتبة الدعم ولديه صلاحية الإدارة كاملة.' });
+            console.error("Error creating channel:", error);
+            await interaction.editReply({ content: '❌ حدث خطأ أثناء إنشاء الغرفة.\nتأكد من أن رتبة البوت أعلى من رتبة الدعم في الإعدادات، ولديه صلاحية الإدارة كاملة، وأن رقم الـ ID للرتبة والـ Category صحيح تماماً.' });
         }
     }
 
