@@ -2,7 +2,7 @@ const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle,
 const Keyv = require('keyv');
 require('dotenv').config();
 
-// إعداد قاعدة البيانات لحفظ الإعدادات في Railway
+// إعداد قاعدة البيانات لحفظ الإعدادات في Railway أو Render
 const db = new Keyv('sqlite://tickets.sqlite');
 
 const client = new Client({ 
@@ -154,4 +154,56 @@ client.on('interactionCreate', async (interaction) => {
 
     // و) عندما يختار "عضو" تذكرة لفتحها من القائمة المنسدلة العامة
     if (interaction.isStringSelectMenu() && interaction.customId === 'user_ticket_select') {
-        await interaction.defer
+        await interaction.deferReply({ ephemeral: true });
+
+        const savedTypes = await db.get(`tickets_${interaction.guild.id}`) || [];
+        const selectedType = savedTypes.find(t => t.value === interaction.values[0]);
+
+        if (!selectedType) return interaction.editReply({ content: '❌ حدث خطأ، يبدو أن هذا القسم لم يعد موجوداً.' });
+
+        const channelName = `${selectedType.label}-${interaction.user.username}`.replace(/\s+/g, '-').toLowerCase();
+
+        // إنشاء روم الشات المغلق
+        const channel = await interaction.guild.channels.create({
+            name: channelName,
+            type: ChannelType.GuildText,
+            parent: selectedType.categoryId,
+            permissionOverwrites: [
+                { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] }, // إغلاق عن الجميع
+                { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.AttachFiles, PermissionsBitField.Flags.ReadMessageHistory] }, // صاحب التذكرة
+                { id: selectedType.roleId, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.AttachFiles, PermissionsBitField.Flags.ReadMessageHistory] } // رتبة الدعم المحددة للقسم
+            ],
+        });
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId(`delete_ticket_${selectedType.roleId}`)
+                .setLabel('🗑️ حذف التذكرة')
+                .setStyle(ButtonStyle.Danger)
+        );
+
+        await channel.send({
+            content: `👋 مرحباً ${interaction.user} | منشن المسؤولين: <@&${selectedType.roleId}>\nلقد فتحت تذكرة قسم **${selectedType.label}**، يرجى كتابة تفاصيل طلبك هنا.`,
+            components: [row]
+        });
+
+        await interaction.editReply({ content: `✅ تم فتح تذكرتك بنجاح هنا: ${channel}` });
+    }
+
+    // ز) الضغط على زر حذف التذكرة داخل الشات المفتوح
+    if (interaction.isButton() && interaction.customId.startsWith('delete_ticket_')) {
+        const allowedRoleId = interaction.customId.split('_')[2];
+
+        // لا يحذفها إلا صاحب الرتبة المحددة للقسم أو إداري السيرفر
+        if (interaction.member.roles.cache.has(allowedRoleId) || interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+            await interaction.reply('🔒 جاري حذف التذكرة تماماً خلال 3 ثوانٍ...');
+            setTimeout(() => {
+                interaction.channel.delete().catch(() => {});
+            }, 3000);
+        } else {
+            await interaction.reply({ content: '❌ عذراً، لا يمكنك حذف هذه التذكرة. هذا الإجراء مخصص لرتب الدعم الفني الخاصة بهذا القسم فقط.', ephemeral: true });
+        }
+    }
+});
+
+client.login(process.env.DISCORD_TOKEN);
