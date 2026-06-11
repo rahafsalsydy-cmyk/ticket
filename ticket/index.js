@@ -160,6 +160,19 @@ client.on('interactionCreate', async (interaction) => {
         const savedTypes = memoryDB.get(`tickets_${interaction.guild.id}`) || [];
         const selectedType = savedTypes.find(t => t.value === interaction.values[0]);
 
+        // 🔥 [الحل]: هنا نقوم بإجبار القائمة على إعادة التعيين ومسح علامة الصح فوراً في اللوحة العامة
+        try {
+            const currentMenu = new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId('user_ticket_select')
+                    .setPlaceholder('اضغط هنا واختار نوع التذكرة...')
+                    .addOptions(savedTypes.map(t => ({ label: t.label, value: t.value, description: `فتح تذكرة قسم ${t.label}` })))
+            );
+            await interaction.message.edit({ components: [currentMenu] });
+        } catch (e) {
+            console.log("تخطي إعادة تعيين القائمة");
+        }
+
         if (!selectedType) {
             return interaction.editReply({ content: '❌ حدث خطأ، يبدو أن هذا القسم لم يعد موجوداً.' });
         }
