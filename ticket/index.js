@@ -6,12 +6,11 @@ app.get('/', (req, res) => res.send('Bot is Online!'));
 app.listen(port, () => console.log(`🌍 Server is listening on port ${port}`));
 // ---------------------------------------------------------
 
-const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelType, PermissionsBitField, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder } = require('discord.js');
-const Keyv = require('keyv');
+const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelType, PermissionsBitField, ModalBuilder, TextInputBuilder, TextInputStyle, EmbedBuilder, MessageFlags } = require('discord.js');
 require('dotenv').config();
 
-// إعداد قاعدة البيانات لحفظ الإعدادات في Render
-const db = new Keyv('sqlite://tickets.sqlite');
+// استخدام ذاكرة داخلية سريعة بدلاً من المكونات الخارجية لضمان استقرار Render المجاني ومنع التعليق
+const memoryDB = new Map();
 
 const client = new Client({ 
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent] 
@@ -25,13 +24,9 @@ client.once('ready', () => {
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
 
-    // يمكنك تغيير "!panel" إلى أي أمر تفضله للاستدعاء
     if (message.content === '!panel') {
-        
-        // حماية اللوحة: السماح فقط للأشخاص الذين لديهم صلاحية الإدارة (Administrator)
         if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) return;
 
-        // إنشاء أزرار لوحة التحكم الخاصة بك
         const controlRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId('admin_add_ticket_type')
@@ -68,7 +63,7 @@ client.on('interactionCreate', async (interaction) => {
         const categories = interaction.guild.channels.cache.filter(c => c.type === ChannelType.GuildCategory);
         
         if (categories.size === 0) {
-            return interaction.reply({ content: '❌ لا يوجد أي كاتيجوري في هذا السيرفر! يرجى إنشاء كاتيجوري أولاً.', flags: [64] });
+            return interaction.reply({ content: '❌ لا يوجد أي كاتيجوري في هذا السيرفر! يرجى إنشاء كاتيجوري أولاً.', flags: [MessageFlags.Ephemeral] });
         }
 
         const categoryMenu = new StringSelectMenuBuilder()
@@ -81,7 +76,7 @@ client.on('interactionCreate', async (interaction) => {
         await interaction.reply({
             content: '⚙️ **الخطوة 1:** اختر الكاتيجوري التي تريد أن تفتح التذكرة بداخلها من القائمة أدناه:',
             components: [row],
-            flags: [64]
+            flags: [MessageFlags.Ephemeral]
         });
     }
 
@@ -117,23 +112,22 @@ client.on('interactionCreate', async (interaction) => {
     if (interaction.isModalSubmit() && interaction.customId.startsWith('modal_config_')) {
         const categoryId = interaction.customId.split('_')[2];
         const label = interaction.fields.getTextInputValue('ticket_label');
-        const roleId = interaction.fields.getTextInputValue('ticket_role');
+        const roleId = interaction.fields.getTextInputValue('ticket_role').trim();
         const value = `ticket_${Date.now()}`;
 
-        const savedTypes = await db.get(`tickets_${interaction.guild.id}`) || [];
+        const savedTypes = memoryDB.get(`tickets_${interaction.guild.id}`) || [];
         savedTypes.push({ label, value, categoryId, roleId });
-        
-        await db.set(`tickets_${interaction.guild.id}`, savedTypes);
+        memoryDB.set(`tickets_${interaction.guild.id}`, savedTypes);
 
-        await interaction.reply({ content: `✅ تم بنجاح إضافة قسم **(${label})**!\nالآن اكتب الأمر \`!panel\` مجدداً واضغط على زر **"إرسال لوحة التذاكر هنا"** في الروم المخصصة للأعضاء.`, flags: [64] });
+        await interaction.reply({ content: `✅ تم بنجاح إضافة قسم **(${label})**!\nالآن اضغط على زر **"إرسال لوحة التذاكر هنا"** لتحديث اللوحة للأعضاء.`, flags: [MessageFlags.Ephemeral] });
     }
 
     // د) الضغط على زر "إرسال لوحة التذاكر هنا" للأعضاء
     if (interaction.isButton() && interaction.customId === 'admin_send_setup') {
-        const savedTypes = await db.get(`tickets_${interaction.guild.id}`) || [];
+        const savedTypes = memoryDB.get(`tickets_${interaction.guild.id}`) || [];
 
         if (savedTypes.length === 0) {
-            return interaction.reply({ content: '❌ لم تقوم بإضافة أي أقسام تذاكر حتى الآن! اضغط على زر إضافة قسم أولاً.', flags: [64] });
+            return interaction.reply({ content: '❌ لم تقوم بإضافة أي أقسام تذاكر حتى الآن! اضغط على زر إضافة قسم أولاً.', flags: [MessageFlags.Ephemeral] });
         }
 
         const menu = new ActionRowBuilder().addComponents(
@@ -149,68 +143,83 @@ client.on('interactionCreate', async (interaction) => {
             .setDescription('مرحباً بك! يرجى اختيار القسم المناسب لمشكلتك أو طلبك من القائمة المنسدلة أدناه ليتم فتح تذكرة خاصة بك.')
             .setFooter({ text: 'نظام التذاكر الآلي' });
 
-        // إرسال الرسالة في الروم الحالية المفتوحة للأعضاء
         await interaction.channel.send({ embeds: [embed], components: [menu] });
-        await interaction.reply({ content: '✅ تم إرسال لوحة التذاكر للأعضاء بنجاح في هذه الروم!', flags: [64] });
+        await interaction.reply({ content: '✅ تم إرسال لوحة التذاكر للأعضاء بنجاح في هذه الروم!', flags: [MessageFlags.Ephemeral] });
     }
 
     // هـ) زر مسح البيانات بالكامل للبدء من جديد
     if (interaction.isButton() && interaction.customId === 'admin_reset_data') {
-        await db.delete(`tickets_${interaction.guild.id}`);
-        await interaction.reply({ content: '🗑️ تم مسح كافة الأقسام والإعدادات المسجلة بنجاح. يمكنك الإعداد من جديد الآن.', flags: [64] });
+        memoryDB.delete(`tickets_${interaction.guild.id}`);
+        await interaction.reply({ content: '🗑️ تم مسح كافة الأقسام والإعدادات المسجلة بنجاح.', flags: [MessageFlags.Ephemeral] });
     }
 
     // و) عندما يختار "عضو" تذكرة لفتحها من القائمة المنسدلة العامة
     if (interaction.isStringSelectMenu() && interaction.customId === 'user_ticket_select') {
-        // تم تحديثها هنا إلى نظام الرايات الحديث لحل مشكلة التجميد والتحذيرات
-        await interaction.deferReply({ flags: [64] });
+        // الرد المبدئي الفوري لمنع تعليق الديسكورد نهائياً
+        await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
-        const savedTypes = await db.get(`tickets_${interaction.guild.id}`) || [];
+        const savedTypes = memoryDB.get(`tickets_${interaction.guild.id}`) || [];
         const selectedType = savedTypes.find(t => t.value === interaction.values[0]);
 
-        if (!selectedType) return interaction.editReply({ content: '❌ حدث خطأ، يبدو أن هذا القسم لم يعد موجوداً.' });
+        if (!selectedType) {
+            return interaction.editReply({ content: '❌ حدث خطأ، يبدو أن هذا القسم لم يعد موجوداً.' });
+        }
 
-        const channelName = `${selectedType.label}-${interaction.user.username}`.replace(/\s+/g, '-').toLowerCase();
+        try {
+            const channelName = `${selectedType.label}-${interaction.user.username}`.replace(/\s+/g, '-').toLowerCase();
 
-        // إنشاء روم الشات المغلق
-        const channel = await interaction.guild.channels.create({
-            name: channelName,
-            type: ChannelType.GuildText,
-            parent: selectedType.categoryId,
-            permissionOverwrites: [
-                { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] }, // إغلاق عن الجميع
-                { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.AttachFiles, PermissionsBitField.Flags.ReadMessageHistory] }, // صاحب التذكرة
-                { id: selectedType.roleId, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.AttachFiles, PermissionsBitField.Flags.ReadMessageHistory] } // رتبة الدعم المحددة للقسم
-            ],
-        });
+            // إنشاء روم الشات المغلق وتطبيق الصلاحيات بدقة وسرعة
+            const channel = await interaction.guild.channels.create({
+                name: channelName,
+                type: ChannelType.GuildText,
+                parent: selectedType.categoryId,
+                permissionOverwrites: [
+                    { 
+                        id: interaction.guild.id, 
+                        deny: [PermissionsBitField.Flags.ViewChannel] 
+                    }, 
+                    { 
+                        id: interaction.user.id, 
+                        allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.AttachFiles, PermissionsBitField.Flags.ReadMessageHistory] 
+                    }, 
+                    { 
+                        id: selectedType.roleId, 
+                        allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.AttachFiles, PermissionsBitField.Flags.ReadMessageHistory] 
+                    } 
+                ],
+            });
 
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId(`delete_ticket_${selectedType.roleId}`)
-                .setLabel('🗑️ حذف التذكرة')
-                .setStyle(ButtonStyle.Danger)
-        );
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`delete_ticket_${selectedType.roleId}`)
+                    .setLabel('🗑️ حذف التذكرة')
+                    .setStyle(ButtonStyle.Danger)
+            );
 
-        await channel.send({
-            content: `👋 مرحباً ${interaction.user} | منشن المسؤولين: <@&${selectedType.roleId}>\nلقد فتحت تذكرة قسم **${selectedType.label}**، يرجى كتابة تفاصيل طلبك هنا.`,
-            components: [row]
-        });
+            await channel.send({
+                content: `👋 مرحباً ${interaction.user} | منشن المسؤولين: <@&${selectedType.roleId}>\nلقد فتحت تذكرة قسم **${selectedType.label}**، يرجى كتابة تفاصيل طلبك هنا.`,
+                components: [row]
+            });
 
-        await interaction.editReply({ content: `✅ تم فتح تذكرتك بنجاح هنا: ${channel}` });
+            await interaction.editReply({ content: `✅ تم فتح تذكرتك بنجاح هنا: ${channel}` });
+
+        } catch (error) {
+            console.error(error);
+            await interaction.editReply({ content: '❌ حدث خطأ أثناء إنشاء الغرفة. تأكد من أن رتبة البوت أعلى من رتبة الدعم ولديه صلاحية الإدارة كاملة.' });
+        }
     }
 
     // ز) الضغط على زر حذف التذكرة داخل الشات المفتوح
     if (interaction.isButton() && interaction.customId.startsWith('delete_ticket_')) {
         const allowedRoleId = interaction.customId.split('_')[2];
 
-        // لا يحذفها إلا صاحب الرتبة المحددة للقسم أو إداري السيرفر
         if (interaction.member.roles.cache.has(allowedRoleId) || interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
             await interaction.reply('🔒 جاري حذف التذكرة تماماً خلال 3 ثوانٍ...');
             setTimeout(() => {
                 interaction.channel.delete().catch(() => {});
             }, 3000);
         } else {
-            await interaction.reply({ content: '❌ عذراً، لا يمكنك حذف هذه التذكرة. هذا الإجراء مخصص لرتب الدعم الفني الخاصة بهذا القسم فقط.', flags: [64] });
+            await interaction.reply({ content: '❌ عذراً، لا يمكنك حذف هذه التذكرة. هذا الإجراء مخصص لرتب الدعم الفني الخاصة بهذا القسم فقط.', flags: [MessageFlags.Ephemeral] });
         }
     }
 });
