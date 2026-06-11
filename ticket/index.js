@@ -1,4 +1,4 @@
-// ---- كود تزييف الـ Port لمنصة Render لمنع إغلاق البوت ----
+// ---- كود تزييف الـ Port لمنصة Render لمنع إغلاق أو تعليق البوت ----
 const express = require('express');
 const app = express();
 const port = process.env.PORT || 3000;
@@ -68,7 +68,7 @@ client.on('interactionCreate', async (interaction) => {
         const categories = interaction.guild.channels.cache.filter(c => c.type === ChannelType.GuildCategory);
         
         if (categories.size === 0) {
-            return interaction.reply({ content: '❌ لا يوجد أي كاتيجوري في هذا السيرفر! يرجى إنشاء كاتيجوري أولاً.', ephemeral: true });
+            return interaction.reply({ content: '❌ لا يوجد أي كاتيجوري في هذا السيرفر! يرجى إنشاء كاتيجوري أولاً.', flags: [64] });
         }
 
         const categoryMenu = new StringSelectMenuBuilder()
@@ -81,7 +81,7 @@ client.on('interactionCreate', async (interaction) => {
         await interaction.reply({
             content: '⚙️ **الخطوة 1:** اختر الكاتيجوري التي تريد أن تفتح التذكرة بداخلها من القائمة أدناه:',
             components: [row],
-            ephemeral: true
+            flags: [64]
         });
     }
 
@@ -125,7 +125,7 @@ client.on('interactionCreate', async (interaction) => {
         
         await db.set(`tickets_${interaction.guild.id}`, savedTypes);
 
-        await interaction.reply({ content: `✅ تم بنجاح إضافة قسم **(${label})**!\nالآن اكتب الأمر \`!panel\` مجدداً واضغط على زر **"إرسال لوحة التذاكر هنا"** في الروم المخصصة للأعضاء.`, ephemeral: true });
+        await interaction.reply({ content: `✅ تم بنجاح إضافة قسم **(${label})**!\nالآن اكتب الأمر \`!panel\` مجدداً واضغط على زر **"إرسال لوحة التذاكر هنا"** في الروم المخصصة للأعضاء.`, flags: [64] });
     }
 
     // د) الضغط على زر "إرسال لوحة التذاكر هنا" للأعضاء
@@ -133,7 +133,7 @@ client.on('interactionCreate', async (interaction) => {
         const savedTypes = await db.get(`tickets_${interaction.guild.id}`) || [];
 
         if (savedTypes.length === 0) {
-            return interaction.reply({ content: '❌ لم تقوم بإضافة أي أقسام تذاكر حتى الآن! اضغط على زر إضافة قسم أولاً.', ephemeral: true });
+            return interaction.reply({ content: '❌ لم تقوم بإضافة أي أقسام تذاكر حتى الآن! اضغط على زر إضافة قسم أولاً.', flags: [64] });
         }
 
         const menu = new ActionRowBuilder().addComponents(
@@ -151,18 +151,19 @@ client.on('interactionCreate', async (interaction) => {
 
         // إرسال الرسالة في الروم الحالية المفتوحة للأعضاء
         await interaction.channel.send({ embeds: [embed], components: [menu] });
-        await interaction.reply({ content: '✅ تم إرسال لوحة التذاكر للأعضاء بنجاح في هذه الروم!', ephemeral: true });
+        await interaction.reply({ content: '✅ تم إرسال لوحة التذاكر للأعضاء بنجاح في هذه الروم!', flags: [64] });
     }
 
     // هـ) زر مسح البيانات بالكامل للبدء من جديد
     if (interaction.isButton() && interaction.customId === 'admin_reset_data') {
         await db.delete(`tickets_${interaction.guild.id}`);
-        await interaction.reply({ content: '🗑️ تم مسح كافة الأقسام والإعدادات المسجلة بنجاح. يمكنك الإعداد من جديد الآن.', ephemeral: true });
+        await interaction.reply({ content: '🗑️ تم مسح كافة الأقسام والإعدادات المسجلة بنجاح. يمكنك الإعداد من جديد الآن.', flags: [64] });
     }
 
     // و) عندما يختار "عضو" تذكرة لفتحها من القائمة المنسدلة العامة
     if (interaction.isStringSelectMenu() && interaction.customId === 'user_ticket_select') {
-        await interaction.deferReply({ ephemeral: true });
+        // تم تحديثها هنا إلى نظام الرايات الحديث لحل مشكلة التجميد والتحذيرات
+        await interaction.deferReply({ flags: [64] });
 
         const savedTypes = await db.get(`tickets_${interaction.guild.id}`) || [];
         const selectedType = savedTypes.find(t => t.value === interaction.values[0]);
@@ -209,7 +210,7 @@ client.on('interactionCreate', async (interaction) => {
                 interaction.channel.delete().catch(() => {});
             }, 3000);
         } else {
-            await interaction.reply({ content: '❌ عذراً، لا يمكنك حذف هذه التذكرة. هذا الإجراء مخصص لرتب الدعم الفني الخاصة بهذا القسم فقط.', ephemeral: true });
+            await interaction.reply({ content: '❌ عذراً، لا يمكنك حذف هذه التذكرة. هذا الإجراء مخصص لرتب الدعم الفني الخاصة بهذا القسم فقط.', flags: [64] });
         }
     }
 });
