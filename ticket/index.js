@@ -160,17 +160,17 @@ client.on('interactionCreate', async (interaction) => {
         const savedTypes = memoryDB.get(`tickets_${interaction.guild.id}`) || [];
         const selectedType = savedTypes.find(t => t.value === interaction.values[0]);
 
-        // 🔥 [الحل]: هنا نقوم بإجبار القائمة على إعادة التعيين ومسح علامة الصح فوراً في اللوحة العامة
+        // 🔥 [الحل البرمجي للقائمة]: إعادة بناء القائمة فارغة فوراً لمسح علامة الصح الزرقاء
         try {
-            const currentMenu = new ActionRowBuilder().addComponents(
+            const resetMenu = new ActionRowBuilder().addComponents(
                 new StringSelectMenuBuilder()
                     .setCustomId('user_ticket_select')
                     .setPlaceholder('اضغط هنا واختار نوع التذكرة...')
                     .addOptions(savedTypes.map(t => ({ label: t.label, value: t.value, description: `فتح تذكرة قسم ${t.label}` })))
             );
-            await interaction.message.edit({ components: [currentMenu] });
+            await interaction.message.edit({ components: [resetMenu] });
         } catch (e) {
-            console.log("تخطي إعادة تعيين القائمة");
+            console.log("تخطي إعادة تعيين اللوحة العامة");
         }
 
         if (!selectedType) {
@@ -194,22 +194,25 @@ client.on('interactionCreate', async (interaction) => {
         try {
             const channelName = `${selectedType.label}-${interaction.user.username}`.replace(/\s+/g, '-').toLowerCase();
 
-            // إنشاء روم الشات المغلق وتطبيق الصلاحيات بدقة
+            // 🔥 [تحديث الصلاحيات الجذري]: كتابة الصلاحيات مع تحديد نوع الإدخال لضمان قبول ديسكورد للطلب
             const channel = await interaction.guild.channels.create({
                 name: channelName,
                 type: ChannelType.GuildText,
                 parent: selectedType.categoryId,
                 permissionOverwrites: [
                     { 
-                        id: interaction.guild.id, 
+                        id: interaction.guild.id, // الجميع (@everyone)
+                        type: 0, // 0 تعني Role
                         deny: [PermissionsBitField.Flags.ViewChannel] 
                     }, 
                     { 
-                        id: interaction.user.id, 
+                        id: interaction.user.id, // العضو فاتح التذكرة
+                        type: 1, // 1 تعني Member
                         allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.AttachFiles, PermissionsBitField.Flags.ReadMessageHistory] 
                     }, 
                     { 
-                        id: selectedType.roleId, 
+                        id: selectedType.roleId, // رتبة الدعم الفني للقسم
+                        type: 0, // 0 تعني Role
                         allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.AttachFiles, PermissionsBitField.Flags.ReadMessageHistory] 
                     } 
                 ],
@@ -231,7 +234,7 @@ client.on('interactionCreate', async (interaction) => {
 
         } catch (error) {
             console.error("Error creating channel:", error);
-            await interaction.editReply({ content: '❌ حدث خطأ أثناء إنشاء الغرفة.\nتأكد من أن رتبة البوت أعلى من رتبة الدعم في الإعدادات، ولديه صلاحية الإدارة كاملة، وأن رقم الـ ID للرتبة والـ Category صحيح تماماً.' });
+            await interaction.editReply({ content: '❌ حدث خطأ أثناء إنشاء الغرفة البرمجية.\nيرجى الضغط على زر "إعادة تعيين" الأحمر، ثم أعد إضافة القسم مجدداً للتأكد من ربط الـ IDs السليمة.' });
         }
     }
 
